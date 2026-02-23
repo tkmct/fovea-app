@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: tkmct/foveaci
-          ref: a683c8c
+          ref: e052c4a1b8c53ea40a7750b2559b10076e9a0e6a
           path: foveaci-tool
 
       - name: Setup pnpm
