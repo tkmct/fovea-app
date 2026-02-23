@@ -1,0 +1,18 @@
+{
+  "name": "fovea-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Rich UX verification sample app for FoveaCI",
+  "scripts": {
+    "start": "node ./src/server.js",
+    "dev": "node ./src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fovea App</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Fovea App</h1>
+      <p>Sample app with multi-step UX flows for PR-based evaluation.</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Account</h2>
+        <div class="grid two">
+          <form id="register-form" class="stack">
+            <h3>Create account</h3>
+            <label for="register-name">Name</label>
+            <input id="register-name" name="name" type="text" required />
+
+            <label for="register-email">Email</label>
+            <input id="register-email" name="email" type="email" required />
+
+            <label for="register-password">Password</label>
+            <input id="register-password" name="password" type="password" required />
+
+            <label for="register-role">Role</label>
+            <select id="register-role" name="role">
+              <option value="member">Member</option>
+              <option value="manager">Manager</option>
+            </select>
+
+            <button id="register-submit" type="submit">Create account</button>
+          </form>
+
+          <form id="login-form" class="stack">
+            <h3>Login</h3>
+            <label for="login-email">Email</label>
+            <input id="login-email" name="email" type="email" required />
+
+            <label for="login-password">Password</label>
+            <input id="login-password" name="password" type="password" required />
+
+            <button id="login-submit" type="submit">Sign in</button>
+            <p id="auth-state">Not signed in</p>
+          </form>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Catalog</h2>
+        <div class="grid three">
+          <div class="stack">
+            <label for="search-query">Search products</label>
+            <input id="search-query" placeholder="search by name" />
+          </div>
+
+          <div class="stack">
+            <label for="category-filter">Category</label>
+            <select id="category-filter">
+              <option value="all">All</option>
+              <option value="plan">Plan</option>
+              <option value="addon">Add-on</option>
+            </select>
+          </div>
+
+          <div class="stack bottom">
+            <button id="search-products" type="button">Refresh catalog</button>
+          </div>
+        </div>
+        <div id="product-list" class="stack"></div>
+      </section>
+
+      <section class="card">
+        <h2>Checkout</h2>
+        <div id="cart-items" class="stack"></div>
+        <div class="grid two">
+          <div class="stack">
+            <label for="coupon-code">Coupon code</label>
+            <input id="coupon-code" placeholder="WELCOME10" />
+          </div>
+          <div class="stack">
+            <label for="shipping-speed">Shipping speed</label>
+            <select id="shipping-speed">
+              <option value="standard">Standard</option>
+              <option value="express">Express</option>
+            </select>
+          </div>
+        </div>
+        <button id="checkout-submit" type="button">Complete checkout</button>
+        <p id="checkout-result">No order yet</p>
+      </section>
+
+      <section class="card">
+        <h2>Support</h2>
+        <form id="support-form" class="stack">
+          <label for="support-topic">Topic</label>
+          <input id="support-topic" required />
+
+          <label for="support-detail">Detail</label>
+          <textarea id="support-detail" rows="3" required></textarea>
+
+          <button id="support-submit" type="submit">Create ticket</button>
+        </form>
+        <button id="refresh-tickets" type="button">Refresh tickets</button>
+        <ul id="ticket-list"></ul>
+      </section>
+    </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

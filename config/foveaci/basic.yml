@@ -1,0 +1,74 @@
+project:
+  name: "fovea-app"
+  baseUrl: "http://localhost:3456"
+
+run:
+  browser: "chromium"
+  headless: true
+  video: false
+  trace: false
+  concurrency: 1
+  timeoutMs: 90000
+
+recording:
+  rrweb: true
+  maskInputs: true
+  fakeCursor: true
+
+personas:
+  - id: "normal_user"
+    speed: 1.0
+    jitterPx: 2.0
+    misclickRate: 0.0
+    typoRate: 0.0
+    patienceMs: 3000
+
+tasks:
+  - id: "login_existing"
+    entry: "/"
+    goal: "Sign in with seeded demo account"
+    steps:
+      - kind: "type"
+        target: { css: "#login-email" }
+        value: "demo@example.com"
+      - kind: "type"
+        target: { css: "#login-password" }
+        value: "DemoPass123!"
+      - kind: "click"
+        target: { role: "button", name: "Sign in" }
+      - kind: "expect"
+        target: { text: "Signed in as Demo User" }
+
+  - id: "checkout_after_login"
+    entry: "/"
+    goal: "Sign in, search product, and checkout"
+    steps:
+      - kind: "type"
+        target: { css: "#login-email" }
+        value: "demo@example.com"
+      - kind: "type"
+        target: { css: "#login-password" }
+        value: "DemoPass123!"
+      - kind: "click"
+        target: { role: "button", name: "Sign in" }
+      - kind: "expect"
+        target: { text: "Signed in as Demo User" }
+      - kind: "type"
+        target: { css: "#search-query" }
+        value: "Plan"
+      - kind: "click"
+        target: { role: "button", name: "Refresh catalog" }
+      - kind: "click"
+        target: { role: "button", name: "Add Starter Plan" }
+      - kind: "type"
+        target: { css: "#coupon-code" }
+        value: "WELCOME10"
+      - kind: "click"
+        target: { role: "button", name: "Complete checkout" }
+      - kind: "expect"
+        target: { text: "completed" }
+
+gates:
+  - metric: "taskSuccessRate"
+    op: ">="
+    value: 0.5
