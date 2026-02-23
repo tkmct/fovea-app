@@ -34,6 +34,8 @@ See `docs/ux-flows.md`.
   - install, test, start app, health check
 - `.github/workflows/foveaci-smoke.yml`
   - workflow_dispatch smoke that checks out `foveaci` repo and runs `fov run` against this app
+- `.github/workflows/pr-ux-eval.yml`
+  - PR flow: scenario preview comment on every update, and full `pr-eval` run after label `ux-eval-approved`
 
 ## Integrating with FoveaCI PR Workflow
 In `foveaci` repo workflow, replace sample app start step with:
