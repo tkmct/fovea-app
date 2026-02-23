@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: tkmct/foveaci
-          ref: main
+          ref: feature/pr-ux-eval-tooling
           path: foveaci-tool
 
       - name: Setup pnpm
@@ -151,4 +151,3 @@ jobs:
           path: |
             artifacts
             /tmp/fovea-app.log
-
