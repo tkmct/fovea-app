@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: tkmct/foveaci
-          ref: feature/pr-ux-eval-tooling
+          ref: a683c8c
           path: foveaci-tool
 
       - name: Setup pnpm
@@ -82,6 +82,9 @@ jobs:
             --scenario-file ./artifacts/pr-discovery/discovered-scenarios.yml \
             --preview-file ./artifacts/pr-discovery/scenario-preview.md \
             --pr-metadata ./artifacts/pr.json \
+            --artifact-name "pr-ux-eval-${{ github.event.pull_request.number }}" \
+            --local-serve-cmd "node <foveaci_root>/dist/bin/fov.js serve-report --dir <artifact_root>/artifacts/pr-eval/report --port 4173" \
+            --local-open-cmd "http://localhost:4173/index.html" \
             --output ./artifacts/pr-comment.md
 
       - name: Post preview comment
@@ -132,7 +135,16 @@ jobs:
             --preview-file ./artifacts/pr-discovery/scenario-preview.md \
             --pr-metadata ./artifacts/pr.json \
             --candidate-dir ./artifacts/pr-eval \
+            --artifact-name "pr-ux-eval-${{ github.event.pull_request.number }}" \
+            --local-serve-cmd "node <foveaci_root>/dist/bin/fov.js serve-report --dir <artifact_root>/artifacts/pr-eval/report --port 4173" \
+            --local-open-cmd "http://localhost:4173/index.html" \
             --output ./artifacts/pr-comment.md
+
+      - name: Validate replay artifacts
+        if: contains(github.event.pull_request.labels.*.name, 'ux-eval-approved')
+        run: |
+          test -f ./artifacts/pr-eval/report/index.html
+          test -f ./artifacts/pr-eval/report/report-data.json
 
       - name: Post result comment
         if: contains(github.event.pull_request.labels.*.name, 'ux-eval-approved')
