@@ -1,0 +1,275 @@
+name: PR UX Execute
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Optional PR number to run"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  discover-approved:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+      - name: Checkout foveaci tool
+        uses: actions/checkout@v4
+        with:
+          repository: tkmct/foveaci
+          ref: feature/pr-ux-eval-tooling
+          path: foveaci-tool
+
+      - name: Build approved PR matrix
+        id: matrix
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TARGET_PR_NUMBER: ${{ github.event.inputs.pr_number || '' }}
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const { spawnSync } = require("child_process");
+
+          const token = process.env.GITHUB_TOKEN;
+          const repo = process.env.GITHUB_REPOSITORY;
+          const target = process.env.TARGET_PR_NUMBER ? Number(process.env.TARGET_PR_NUMBER) : null;
+          const [owner, name] = repo.split("/");
+
+          async function gh(path) {
+            const res = await fetch(`https://api.github.com${path}`, {
+              headers: {
+                Accept: "application/vnd.github+json",
+                Authorization: `Bearer ${token}`,
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "foveaci-pr-ux-execute",
+              },
+            });
+            if (!res.ok) {
+              throw new Error(`GitHub API failed: ${res.status} ${await res.text()}`);
+            }
+            return res.json();
+          }
+
+          (async () => {
+            const prs = await gh(`/repos/${owner}/${name}/pulls?state=open&per_page=100`);
+            const selected = target ? prs.filter((pr) => pr.number === target) : prs;
+            const include = [];
+
+            for (const pr of selected) {
+              const result = spawnSync(
+                "node",
+                [
+                  "./foveaci-tool/scripts/check_reaction_approval.mjs",
+                  "--repo",
+                  repo,
+                  "--pr-number",
+                  String(pr.number),
+                  "--token",
+                  token,
+                  "--reaction",
+                  "+1",
+                  "--min-permission",
+                  "write",
+                  "--json",
+                  "true",
+                ],
+                { encoding: "utf-8" }
+              );
+              if (result.status !== 0) {
+                console.log(`[fov] Skip PR #${pr.number}: approval check failed`);
+                continue;
+              }
+              const raw = result.stdout.trim().split("\n").filter(Boolean).pop();
+              if (!raw) continue;
+              let approval;
+              try {
+                approval = JSON.parse(raw);
+              } catch {
+                continue;
+              }
+              if (!approval.approved) {
+                continue;
+              }
+
+              include.push({
+                pr_number: pr.number,
+                base_sha: pr.base.sha,
+                head_sha: pr.head.sha,
+              });
+            }
+
+            const matrix = { include };
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\n`);
+            console.log(`[fov] Approved PRs: ${include.length}`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+  run-approved:
+    needs: discover-approved
+    if: ${{ fromJSON(needs.discover-approved.outputs.matrix).include[0] != null }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover-approved.outputs.matrix) }}
+    concurrency:
+      group: pr-ux-execute-${{ matrix.pr_number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.head_sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Checkout foveaci tool
+        uses: actions/checkout@v4
+        with:
+          repository: tkmct/foveaci
+          ref: feature/pr-ux-eval-tooling
+          path: foveaci-tool
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install foveaci dependencies
+        working-directory: foveaci-tool
+        run: pnpm install --frozen-lockfile
+
+      - name: Build foveaci
+        working-directory: foveaci-tool
+        run: pnpm build
+
+      - name: Build PR metadata
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ matrix.pr_number }}
+        with:
+          script: |
+            const fs = require("fs");
+            const prNumber = Number(process.env.PR_NUMBER);
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            const metadata = {
+              number: pr.data.number,
+              title: pr.data.title,
+              body: pr.data.body || "",
+              labels: pr.data.labels.map((label) => label.name),
+              url: pr.data.html_url,
+            };
+            fs.mkdirSync("artifacts", { recursive: true });
+            fs.writeFileSync("artifacts/pr.json", JSON.stringify(metadata, null, 2));
+
+      - name: Discover scenarios
+        run: |
+          node ./foveaci-tool/dist/bin/fov.js discover \
+            --base "${{ matrix.base_sha }}" \
+            --head "${{ matrix.head_sha }}" \
+            --pr-metadata ./artifacts/pr.json \
+            --out ./artifacts/pr-discovery
+
+      - name: Approve scenarios for execution
+        run: |
+          node ./foveaci-tool/scripts/approve_scenarios.mjs \
+            --input ./artifacts/pr-discovery/discovered-scenarios.yml \
+            --output ./artifacts/pr-discovery/approved-scenarios.yml \
+            --min-confidence 0.6 \
+            --require-any-source code,docs
+
+      - name: Count approved scenarios
+        id: approved
+        run: |
+          count=$(grep -c "approved: true" ./artifacts/pr-discovery/approved-scenarios.yml || true)
+          echo "count=${count}" >> "${GITHUB_OUTPUT}"
+          echo "[fov] Approved scenarios: ${count}"
+
+      - name: Install Playwright browser
+        if: steps.approved.outputs.count != '0'
+        working-directory: foveaci-tool
+        run: npx playwright install chromium
+
+      - name: Start app
+        if: steps.approved.outputs.count != '0'
+        run: npm start >/tmp/fovea-app.log 2>&1 &
+
+      - name: Wait for app health
+        if: steps.approved.outputs.count != '0'
+        run: npx wait-on http://localhost:3456/api/health
+
+      - name: Run PR evaluation
+        if: steps.approved.outputs.count != '0'
+        run: |
+          node ./foveaci-tool/dist/bin/fov.js pr-eval \
+            --config ./config/foveaci/basic.yml \
+            --scenario-file ./artifacts/pr-discovery/approved-scenarios.yml \
+            --pr-metadata ./artifacts/pr.json \
+            --out ./artifacts/pr-eval \
+            --advisor on \
+            --skip-label-check
+
+      - name: Render result comment
+        if: steps.approved.outputs.count != '0'
+        run: |
+          node ./foveaci-tool/scripts/render_pr_summary.mjs \
+            --scenario-file ./artifacts/pr-discovery/approved-scenarios.yml \
+            --preview-file ./artifacts/pr-discovery/scenario-preview.md \
+            --pr-metadata ./artifacts/pr.json \
+            --candidate-dir ./artifacts/pr-eval \
+            --artifact-name "pr-ux-eval-${{ matrix.pr_number }}" \
+            --approval-mode reaction \
+            --approval-reaction +1 \
+            --approval-min-permission write \
+            --local-serve-cmd "bun run serve-report:artifact" \
+            --local-open-cmd "http://localhost:4173/index.html" \
+            --output ./artifacts/pr-comment.md
+
+      - name: Validate replay artifacts
+        if: steps.approved.outputs.count != '0'
+        run: |
+          test -f ./artifacts/pr-eval/report/index.html
+          test -f ./artifacts/pr-eval/report/report-data.json
+
+      - name: Post result comment
+        if: steps.approved.outputs.count != '0'
+        run: |
+          node ./foveaci-tool/scripts/post_pr_comment.mjs \
+            --repo "${{ github.repository }}" \
+            --pr-number "${{ matrix.pr_number }}" \
+            --token "${{ github.token }}" \
+            --body-file ./artifacts/pr-comment.md
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-ux-eval-${{ matrix.pr_number }}
+          path: |
+            artifacts
+            /tmp/fovea-app.log
